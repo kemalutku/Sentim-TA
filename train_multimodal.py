@@ -17,22 +17,26 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 # ───────── training loop ───────────
-def train():
-    model = config.model(in_channels=2).to(device)
+def _run_training(in_channels: int, include_sentiment: bool, log_suffix: str, comment: str):
+    model = config.model(in_channels=in_channels).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
     crit = torch.nn.CrossEntropyLoss(weight=torch.tensor(config.class_weights, device=device))
 
-    finance_train_dir = list(Path(config.train_dir).glob(config.sentiment_ticker + "*.csv"))[0].__str__()
-    finance_test_dir = list(Path(config.test_dir).glob(config.sentiment_ticker + "*.csv"))[0].__str__()
+    finance_train_dir = list(Path(config.train_dir).glob(config.sentiment_ticker + "*.csv"))[0]
+    finance_test_dir = list(Path(config.test_dir).glob(config.sentiment_ticker + "*.csv"))[0]
 
-    # ---- data ----
-    train_ds = MultiModalDataset(str(finance_train_dir), config.sentiment_dir, config.indicators)
-    train_ld = DataLoader(train_ds, batch_size=config.batch_size, shuffle=True, pin_memory=True, drop_last=True)
+    train_ds = MultiModalDataset(str(finance_train_dir), config.sentiment_dir,
+                                config.indicators, include_sentiment=include_sentiment)
+    train_ld = DataLoader(train_ds, batch_size=config.batch_size, shuffle=True,
+                          pin_memory=True, drop_last=True)
 
-    test_ds = MultiModalDataset(str(finance_test_dir), config.sentiment_dir, config.indicators)
-    test_ld = DataLoader(test_ds, batch_size=config.batch_size, shuffle=False, pin_memory=True)
+    test_ds = MultiModalDataset(str(finance_test_dir), config.sentiment_dir,
+                               config.indicators, include_sentiment=include_sentiment)
+    test_ld = DataLoader(test_ds, batch_size=config.batch_size, shuffle=False,
+                         pin_memory=True)
 
-    logger = TBLogger(config.record_dir, config.run_name, comment="MultiModal")
+    run_name = f"{config.run_name}_{log_suffix}"
+    logger = TBLogger(config.record_dir, run_name, comment=comment)
 
     for epoch in trange(config.max_epochs, desc="Epochs"):
         # =================== TRAIN =================== #
@@ -72,7 +76,7 @@ def train():
                 preds = torch.argmax(outs, 1).cpu().tolist()
                 labs = torch.argmax(lbls, 1).cpu().tolist()
 
-                p_all.extend(preds);
+                p_all.extend(preds)
                 y_all.extend(labs)
 
                 bucket = by_symbol.setdefault(config.sentiment_ticker, {"ts": [], "cl": [], "pr": []})
@@ -83,12 +87,21 @@ def train():
         logger.log_epoch("eval", epoch, tot_loss / batches,
                          np.array(y_all), np.array(p_all))
 
-        # ---- trading sim per symbol ----
         trade_res = [trading(v["ts"], v["cl"], v["pr"])[0]
                      for v in by_symbol.values()]
         logger.log_trading(epoch, trade_res)
 
     logger.close()
+
+
+def train():
+    # ---- Stage 1: finance-only training ----
+    _run_training(in_channels=1, include_sentiment=False,
+                  log_suffix="finance_only", comment="finance-only")
+
+    # ---- Stage 2: full multimodal training ----
+    _run_training(in_channels=2, include_sentiment=True,
+                  log_suffix="multimodal", comment="multi-modal")
 
 
 if __name__ == "__main__":
