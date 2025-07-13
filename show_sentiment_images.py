@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 # ───────────────────────── CONFIGURATION ────────────────────────────
-DATA_DIR = r"C:\Users\KemalUtkuLekesiz\Documents\Kod\Okul\NLP\SentimTA\data\cleaned"
-OUT_DIR  = r"C:\Users\KemalUtkuLekesiz\Documents\Kod\Okul\NLP\SentimTA\data\samples"
+DATA_DIR = r"/data_sentim\cleaned"
+OUT_DIR  = r"/data_sentim\samples"
 # ────────────────────────────────────────────────────────────────────
 
 import json

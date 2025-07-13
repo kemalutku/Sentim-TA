@@ -1,0 +1,1 @@
+from model.CnnTA import CnnTa

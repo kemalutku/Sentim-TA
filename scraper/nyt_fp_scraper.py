@@ -12,7 +12,7 @@ START_YEAR = 2002
 END_YEAR = datetime.now().year
 END_MONTH = datetime.now().month
 
-output_file = 'data/nyt_front_page/articles.csv'
+output_file = 'data_sentim/nyt_front_page/articles.csv'
 
 def is_front_page(article):
     # NYT Archive API does not directly indicate front page articles.
