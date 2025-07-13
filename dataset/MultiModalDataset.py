@@ -13,12 +13,35 @@ class MultiModalDataset(Dataset):
     Channel 0: finance features, Channel 1: sentiment features
     """
 
-    def __init__(self, finance_root: str | Path, sentim_root: str | Path, feature_cols: list[str], sort_by_date=True,
-                 return_symbol=False):
+    def __init__(self, finance_root: str | Path, sentim_root: str | Path,
+                 feature_cols: list[str], sort_by_date=True,
+                 return_symbol: bool = False,
+                 include_sentiment: bool = True):
+        """Create dataset for paired finance/sentiment CSVs.
+
+        Parameters
+        ----------
+        finance_root : str | Path
+            Path to finance CSV file.
+        sentim_root : str | Path
+            Path to sentiment CSV file.
+        feature_cols : list[str]
+            Finance feature column names.
+        sort_by_date : bool, optional
+            Sort rows by ``Date`` column before merging, by default ``True``.
+        return_symbol : bool, optional
+            Unused compatibility flag kept for API compatibility.
+        include_sentiment : bool, optional
+            If ``False`` only the finance channel will be returned from
+            ``__getitem__``.  When ``True`` a 2 channel image containing
+            finance and sentiment data is returned.
+        """
+
         self.finance_root = Path(finance_root)
         self.feature_cols = feature_cols
         self.num_classes = 3
         self.return_symbol = return_symbol
+        self.include_sentiment = include_sentiment
 
         self.sentim_root = sroot = Path(sentim_root)
         self.sentim_cols = [f't{i}' for i in range(15)]
@@ -56,8 +79,11 @@ class MultiModalDataset(Dataset):
     def __getitem__(self, idx: int):
         start, end = idx, idx + self.sequence_len
         x = torch.from_numpy(self._indicator_data[start:end])
-        s = torch.from_numpy(self._sentiment_data[start:end])
-        img = torch.stack([x, s], dim=0)  # (2, 15, 15)
+        if self.include_sentiment:
+            s = torch.from_numpy(self._sentiment_data[start:end])
+            img = torch.stack([x, s], dim=0)  # (2, 15, 15)
+        else:
+            img = x.unsqueeze(0)  # (1, 15, 15)
         y = torch.nn.functional.one_hot(
             torch.tensor(self._labels[end], dtype=torch.long),
             num_classes=self.num_classes
@@ -77,7 +103,7 @@ if __name__ == "__main__":
     feature_cols = ["RSI", "WIL", "WMA", "EMA", "SMA", "HMA", "TMA", "CCI", "CMO", "MCD", "PPO", "ROC", "CMF", "ADX",
                     "PSA"]
     sentim_cols = [f't{i}' for i in range(15)]
-    ds = MultiModalDataset(finance_root, sentim_root, feature_cols, sentim_cols)
+    ds = MultiModalDataset(finance_root, sentim_root, feature_cols)
     print(f"Loaded dataset with {len(ds)} samples.")
     idx = 0
     while True:
@@ -93,18 +119,23 @@ if __name__ == "__main__":
         title += f"Idx: {idx} | Timestamp: {timestamp} | Close: {close:.2f} | Label: {y.argmax().item()}"
         # Normalize images for display
         finance_img = img[0].numpy()
-        sentim_img = img[1].numpy()
         finance_img = cv2.normalize(finance_img, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-        sentim_img = cv2.normalize(sentim_img, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
         finance_img_color = cv2.applyColorMap(finance_img, cv2.COLORMAP_VIRIDIS)
-        sentim_img_color = cv2.applyColorMap(sentim_img, cv2.COLORMAP_MAGMA)
-        # Resize each channel image to 256x256 before combining
-        finance_img_color = cv2.resize(finance_img_color, (256, 256), interpolation=cv2.INTER_NEAREST)
-        sentim_img_color = cv2.resize(sentim_img_color, (256, 256), interpolation=cv2.INTER_NEAREST)
-        combined = np.hstack([finance_img_color, sentim_img_color])
-        cv2.putText(combined, "Finance", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-        cv2.putText(combined, "Sentiment", (combined.shape[1] // 2 + 10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8,
-                    (255, 255, 255), 2)
+
+        if ds.include_sentiment:
+            sentim_img = img[1].numpy()
+            sentim_img = cv2.normalize(sentim_img, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+            sentim_img_color = cv2.applyColorMap(sentim_img, cv2.COLORMAP_MAGMA)
+            # Resize each channel image to 256x256 before combining
+            finance_img_color = cv2.resize(finance_img_color, (256, 256), interpolation=cv2.INTER_NEAREST)
+            sentim_img_color = cv2.resize(sentim_img_color, (256, 256), interpolation=cv2.INTER_NEAREST)
+            combined = np.hstack([finance_img_color, sentim_img_color])
+            cv2.putText(combined, "Finance", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+            cv2.putText(combined, "Sentiment", (combined.shape[1] // 2 + 10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8,
+                        (255, 255, 255), 2)
+        else:
+            combined = cv2.resize(finance_img_color, (256, 256), interpolation=cv2.INTER_NEAREST)
+            cv2.putText(combined, "Finance", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
         cv2.imshow(title, combined)
         key = cv2.waitKey(0)
         cv2.destroyWindow(title)
