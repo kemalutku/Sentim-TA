@@ -17,25 +17,27 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 # ───────── training loop ───────────
-def _run_training(in_channels: int, include_sentiment: bool, log_suffix: str, comment: str):
+def _run_training(ticker: str, in_channels: int, include_sentiment: bool, log_suffix: str, comment: str):
     model = config.model(in_channels=in_channels).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
     crit = torch.nn.CrossEntropyLoss(weight=torch.tensor(config.class_weights, device=device))
 
-    finance_train_dir = list(Path(config.train_dir).glob(config.sentiment_ticker + "*.csv"))[0]
-    finance_test_dir = list(Path(config.test_dir).glob(config.sentiment_ticker + "*.csv"))[0]
+    finance_train_dir = list(Path(config.train_dir).glob(ticker + "*.csv"))[0]
+    finance_test_dir = list(Path(config.test_dir).glob(ticker + "*.csv"))[0]
 
-    train_ds = MultiModalDataset(str(finance_train_dir), config.sentiment_dir,
+    sentim_file = Path(config.sentiment_dir) / f"{ticker}.csv"
+
+    train_ds = MultiModalDataset(str(finance_train_dir), str(sentim_file),
                                 config.indicators, include_sentiment=include_sentiment)
     train_ld = DataLoader(train_ds, batch_size=config.batch_size, shuffle=True,
                           pin_memory=True, drop_last=True)
 
-    test_ds = MultiModalDataset(str(finance_test_dir), config.sentiment_dir,
+    test_ds = MultiModalDataset(str(finance_test_dir), str(sentim_file),
                                config.indicators, include_sentiment=include_sentiment)
     test_ld = DataLoader(test_ds, batch_size=config.batch_size, shuffle=False,
                          pin_memory=True)
 
-    run_name = f"{config.run_name}_{log_suffix}"
+    run_name = f"{config.run_name}_{ticker}_{log_suffix}"
     logger = TBLogger(config.record_dir, run_name, comment=comment)
 
     for epoch in trange(config.max_epochs, desc="Epochs"):
@@ -79,7 +81,7 @@ def _run_training(in_channels: int, include_sentiment: bool, log_suffix: str, co
                 p_all.extend(preds)
                 y_all.extend(labs)
 
-                bucket = by_symbol.setdefault(config.sentiment_ticker, {"ts": [], "cl": [], "pr": []})
+                bucket = by_symbol.setdefault(ticker, {"ts": [], "cl": [], "pr": []})
                 bucket["ts"].extend(ts.cpu().tolist())
                 bucket["cl"].extend(closes.cpu().tolist())
                 bucket["pr"].extend(preds)
@@ -94,27 +96,29 @@ def _run_training(in_channels: int, include_sentiment: bool, log_suffix: str, co
     logger.close()
 
 
-def _run_finance_then_freeze(log_suffix: str, comment: str) -> None:
+def _run_finance_then_freeze(ticker: str, log_suffix: str, comment: str) -> None:
     """Train a 2-channel model, first on finance only then freeze finance
     convolution weights and continue training with sentiment."""
 
     model = config.model(in_channels=2).to(device)
     crit = torch.nn.CrossEntropyLoss(weight=torch.tensor(config.class_weights, device=device))
 
-    finance_train_dir = list(Path(config.train_dir).glob(config.sentiment_ticker + "*.csv"))[0]
-    finance_test_dir = list(Path(config.test_dir).glob(config.sentiment_ticker + "*.csv"))[0]
+    finance_train_dir = list(Path(config.train_dir).glob(ticker + "*.csv"))[0]
+    finance_test_dir = list(Path(config.test_dir).glob(ticker + "*.csv"))[0]
 
-    train_ds = MultiModalDataset(str(finance_train_dir), config.sentiment_dir,
+    sentim_file = Path(config.sentiment_dir) / f"{ticker}.csv"
+
+    train_ds = MultiModalDataset(str(finance_train_dir), str(sentim_file),
                                 config.indicators, include_sentiment=True)
     train_ld = DataLoader(train_ds, batch_size=config.batch_size, shuffle=True,
                           pin_memory=True, drop_last=True)
 
-    test_ds = MultiModalDataset(str(finance_test_dir), config.sentiment_dir,
+    test_ds = MultiModalDataset(str(finance_test_dir), str(sentim_file),
                                config.indicators, include_sentiment=True)
     test_ld = DataLoader(test_ds, batch_size=config.batch_size, shuffle=False,
                          pin_memory=True)
 
-    run_name = f"{config.run_name}_{log_suffix}"
+    run_name = f"{config.run_name}_{ticker}_{log_suffix}"
     logger = TBLogger(config.record_dir, run_name, comment=comment)
 
     # ── Stage A: train using only finance channel ─────────────────
@@ -151,7 +155,7 @@ def _run_finance_then_freeze(log_suffix: str, comment: str) -> None:
                 tot_loss += crit(outs, lbls).item(); batches += 1
                 preds = torch.argmax(outs, 1).cpu().tolist(); labs = torch.argmax(lbls, 1).cpu().tolist()
                 p_all.extend(preds); y_all.extend(labs)
-                bucket = by_symbol.setdefault(config.sentiment_ticker, {"ts": [], "cl": [], "pr": []})
+                bucket = by_symbol.setdefault(ticker, {"ts": [], "cl": [], "pr": []})
                 bucket["ts"].extend(ts.cpu().tolist())
                 bucket["cl"].extend(closes.cpu().tolist())
                 bucket["pr"].extend(preds)
@@ -199,7 +203,7 @@ def _run_finance_then_freeze(log_suffix: str, comment: str) -> None:
                 tot_loss += crit(outs, lbls).item(); batches += 1
                 preds = torch.argmax(outs, 1).cpu().tolist(); labs = torch.argmax(lbls, 1).cpu().tolist()
                 p_all.extend(preds); y_all.extend(labs)
-                bucket = by_symbol.setdefault(config.sentiment_ticker, {"ts": [], "cl": [], "pr": []})
+                bucket = by_symbol.setdefault(ticker, {"ts": [], "cl": [], "pr": []})
                 bucket["ts"].extend(ts.cpu().tolist()); bucket["cl"].extend(closes.cpu().tolist()); bucket["pr"].extend(preds)
 
         logger.log_epoch("eval", offset, tot_loss / batches, np.array(y_all), np.array(p_all))
@@ -210,16 +214,17 @@ def _run_finance_then_freeze(log_suffix: str, comment: str) -> None:
 
 
 def train():
-    # ---- Stage 1: finance-only training ----
-    _run_training(in_channels=1, include_sentiment=False,
-                  log_suffix="finance_only", comment="finance-only")
+    for ticker in config.tickers:
+        # ---- Stage 1: finance-only training ----
+        _run_training(ticker, in_channels=1, include_sentiment=False,
+                      log_suffix="finance_only", comment="finance-only")
 
-    # ---- Stage 2: full multimodal training ----
-    _run_training(in_channels=2, include_sentiment=True,
-                  log_suffix="multimodal", comment="multi-modal")
+        # ---- Stage 2: full multimodal training ----
+        _run_training(ticker, in_channels=2, include_sentiment=True,
+                      log_suffix="multimodal", comment="multi-modal")
 
-    # ---- Stage 3: finance pretrain then freeze ----
-    _run_finance_then_freeze(log_suffix="fin_freeze", comment="fin-freeze")
+        # ---- Stage 3: finance pretrain then freeze ----
+        _run_finance_then_freeze(ticker, log_suffix="fin_freeze", comment="fin-freeze")
 
 
 if __name__ == "__main__":

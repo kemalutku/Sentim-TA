@@ -11,8 +11,14 @@ working_dir = r"D:\CnnTA\v2"
 train_dir = os.path.join(working_dir, "data_finance", "train", "1d")
 test_dir = os.path.join(working_dir, "data_finance", "test", "1d")
 
-sentiment_ticker = "AAPL"
-sentiment_dir = os.path.join(working_dir, "data_sentim", "preprocessed", f"{sentiment_ticker}.csv")
+# List of tickers to train on
+tickers = [
+    "AAPL", "AXP", "BA", "CAT", "CSCO", "CVX", "DIS", "GS", "HD", "IBM",
+    "JPM", "MCD", "MMM", "MSFT", "NKE", "TRV", "UNH", "V", "VZ",
+]
+
+# Base directory containing sentiment CSVs for each ticker
+sentiment_dir = os.path.join(working_dir, "data_sentim", "preprocessed")
 
 results_dir = os.path.join(working_dir, "results")
 record_dir = os.path.join(working_dir, "records")
