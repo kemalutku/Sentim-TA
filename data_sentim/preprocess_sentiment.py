@@ -6,6 +6,7 @@ from collections import defaultdict
 import re
 from datetime import datetime
 import time
+import argparse
 
 # Directory paths (update as needed)
 finance_data_dir = r"D:/CnnTA/v2/data_finance"
@@ -14,6 +15,15 @@ finance_test_dir = os.path.join(finance_data_dir, "test", "1d")
 sentiment_data_dir = r"D:\CnnTA\v2\data_sentim\raw"
 output_dir = r"D:/CnnTA/v2/data_sentim"
 os.makedirs(output_dir, exist_ok=True)
+
+parser = argparse.ArgumentParser(description="Preprocess sentiment data")
+parser.add_argument(
+    "--count-only",
+    action="store_true",
+    help="aggregate topic counts instead of sentiment scores",
+)
+args = parser.parse_args()
+COUNT_ONLY = args.count_only
 
 # Mapping from finance symbol to sentiment company name
 sentiment_to_finance = {
@@ -97,13 +107,22 @@ for sc in sentim_csvs:
     topic_columns = [f't{i}' for i in range(15)]
     
     # Vectorized aggregation using pivot_table - much faster than nested loops
-    aggregated_df = merged_df.pivot_table(
-        index='date_timestamp',
-        columns='topic_id',
-        values='sentiment',
-        aggfunc='sum',
-        fill_value=0
-    ).reset_index()
+    if COUNT_ONLY:
+        aggregated_df = merged_df.pivot_table(
+            index='date_timestamp',
+            columns='topic_id',
+            values='sentiment',
+            aggfunc='count',
+            fill_value=0
+        ).reset_index()
+    else:
+        aggregated_df = merged_df.pivot_table(
+            index='date_timestamp',
+            columns='topic_id',
+            values='sentiment',
+            aggfunc='sum',
+            fill_value=0
+        ).reset_index()
 
     # Rename columns to match expected format
     aggregated_df.columns = ['date'] + [f't{int(col)}' for col in aggregated_df.columns[1:]]
@@ -123,7 +142,10 @@ for sc in sentim_csvs:
     # Sort by date
     aggregated_df = aggregated_df.sort_values('date').reset_index(drop=True)
     
-    aggregated_df_path = os.path.join(output_dir, "aggregated", os.path.basename(sc) + ".csv")
+    suffix = "_count" if COUNT_ONLY else ""
+    aggregated_df_path = os.path.join(
+        output_dir, "aggregated", os.path.basename(sc).replace(".csv", f"{suffix}.csv")
+    )
     os.makedirs(os.path.dirname(aggregated_df_path), exist_ok=True)
     aggregated_df.to_csv(aggregated_df_path, index=False)
 
@@ -190,7 +212,8 @@ for sc in sentim_csvs:
     aggregated_df['date'] = aggregated_df['date'].astype(int) * 86400000
     
     # Save the adjusted aggregated data with the stock ticker as filename
-    ticker_filename = f"{finance_ticker}.csv"
+    ticker_suffix = "_count" if COUNT_ONLY else ""
+    ticker_filename = f"{finance_ticker}{ticker_suffix}.csv"
     aggregated_df_path = os.path.join(output_dir, "preprocessed", ticker_filename)
     os.makedirs(os.path.dirname(aggregated_df_path), exist_ok=True)
     aggregated_df.to_csv(aggregated_df_path, index=False)
