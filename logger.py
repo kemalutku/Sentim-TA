@@ -61,7 +61,14 @@ class TBLogger:
 
         avg = {k: float(np.mean([r[k] for r in results])) for k in results[0]}
         for k, v in avg.items():
-            tag = f"trading/{k.replace(' ', '_')}"     # TB tags can’t have spaces
+            safe_key = (
+                k.replace(" ", "_")
+                .replace("/", "_")
+                .replace("%", "pct")
+                .replace("(", "_")
+                .replace(")", "_")
+            )
+            tag = f"trading/{safe_key}"
             self.writer.add_scalar(tag, v, epoch)
 
     # ─────────────────────────── housekeeping ───────────────────── #

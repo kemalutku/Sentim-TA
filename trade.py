@@ -66,24 +66,25 @@ def trading(
     sharpe = daily_ret.mean() / daily_ret.std() if daily_ret.std() else 0
 
     total_days = max((timestamps[-1] - timestamps[0]).days, 1)
-    ann_return = safe_cagr(final_value, initial_fund, total_days)       # ✔ no overflow
+    ann_return = safe_cagr(final_value, initial_fund, total_days)  # ✔ no overflow
 
-    trade_pcts  = [t["profit_pct"] for t in trades]
-    idle_ratio  = predictions.count(0) / len(predictions) * 100
+    trade_pcts = [t["profit_pct"] for t in trades]
+    idle_ratio = predictions.count(0) / len(predictions) * 100
 
     result = {
         "Final Value": final_value,
         "Buy & Hold": buy_hold,
-        "Annualized Return (%)": ann_return,
+        "CAGR (%)": ann_return,
         "Sharpe Ratio (daily)": sharpe,
         "Trades Performed": len(trades),
         "Trades Won": sum(p > 0 for p in trade_pcts),
-        "Percent of Success": (sum(p > 0 for p in trade_pcts) / len(trades) * 100) if trades else 0,
-        "Avg Profit per Trade (%)": np.mean(trade_pcts) if trades else 0,
+        "Win Rate (%)": (sum(p > 0 for p in trade_pcts) / len(trades) * 100) if trades else 0,
+        "Avg Profit/Trade (%)": np.mean(trade_pcts) if trades else 0,
         "Avg Trade Length (days)": np.mean([t["length"] for t in trades]) if trades else 0,
         "Max Profit/Trade (%)": max(trade_pcts, default=0),
         "Max Loss/Trade (%)": min(trade_pcts, default=0),
         "Idle Ratio (%)": idle_ratio,
+        "Period (days)": total_days,
     }
     return result, pd.DataFrame(trades)
 
