@@ -19,6 +19,7 @@ record_dir = os.path.join(working_dir, "records")
 checkpoint_dir = os.path.join(working_dir, "checkpoints")
 
 num_parallel_trainings = 1
+num_topics = None  # infer from sentiment CSV
 
 model = CnnTa
 class_weights = [1, 2, 2]
