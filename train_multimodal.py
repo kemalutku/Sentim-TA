@@ -1,4 +1,5 @@
 import os, random, numpy as np, torch, config
+from datetime import datetime
 from pathlib import Path
 from tqdm import trange, tqdm
 from torch.utils.data import DataLoader
@@ -302,5 +303,16 @@ def train():
 
 
 if __name__ == "__main__":
-    train()
+    tickers = getattr(config, "sentiment_ticker_list", [config.sentiment_ticker])
+    base_name = getattr(config, "run_name_base", config.run_name)
+    for t in tickers:
+        config.sentiment_ticker = t
+        config.sentiment_dir = os.path.join(
+            config.working_dir,
+            "data_sentim",
+            "preprocessed",
+            f"{t}.csv",
+        )
+        config.run_name = f"{base_name}_{t}-{datetime.now().strftime('%m_%d_%H_%M')}"
+        train()
     print("✓ Training complete.")
