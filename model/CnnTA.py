@@ -12,6 +12,9 @@ class CnnTa(nn.Module):
 
         self.conv1 = nn.Conv2d(in_channels, 32, kernel_size=3, padding=1)
         self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
+        if apply_bn:
+            self.bn1 = nn.BatchNorm2d(32)
+            self.bn2 = nn.BatchNorm2d(64)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
 
         self.fc1 = nn.Linear(64 * pool_output_dim * pool_output_dim, 128)
@@ -22,7 +25,8 @@ class CnnTa(nn.Module):
 
         self.batch_norm_enabled = apply_bn
 
-    def forward(self, x):
+    def forward_features(self, x: torch.Tensor) -> torch.Tensor:
+        """Return embedding before the classification layer."""
         x = self.conv1(x)
         if self.batch_norm_enabled:
             x = self.bn1(x)
@@ -38,6 +42,10 @@ class CnnTa(nn.Module):
 
         x = torch.flatten(x, start_dim=1)
         x = F.gelu(self.fc1(x))
+        return x
+
+    def forward(self, x):
+        x = self.forward_features(x)
         x = self.dropout2(x)
         x = self.fc2(x)
 

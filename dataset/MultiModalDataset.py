@@ -16,7 +16,8 @@ class MultiModalDataset(Dataset):
     def __init__(self, finance_root: str | Path, sentim_root: str | Path,
                  feature_cols: list[str], sort_by_date=True,
                  return_symbol: bool = False,
-                 include_sentiment: bool = True):
+                 include_sentiment: bool = True,
+                 num_topics: int | None = None):
         """Create dataset for paired finance/sentiment CSVs.
 
         Parameters
@@ -35,6 +36,10 @@ class MultiModalDataset(Dataset):
             If ``False`` only the finance channel will be returned from
             ``__getitem__``.  When ``True`` a 2 channel image containing
             finance and sentiment data is returned.
+        num_topics : int or None, optional
+            Explicit number of sentiment topic columns.  When ``None`` the
+            number of ``t`` prefixed columns is automatically inferred from the
+            sentiment CSV.
         """
 
         self.finance_root = Path(finance_root)
@@ -44,7 +49,18 @@ class MultiModalDataset(Dataset):
         self.include_sentiment = include_sentiment
 
         self.sentim_root = sroot = Path(sentim_root)
-        self.sentim_cols = [f't{i}' for i in range(15)]
+
+        sdf_preview = pd.read_csv(sentim_root, nrows=1)
+        auto_cols = [c for c in sdf_preview.columns if c.startswith('t') and c[1:].isdigit()]
+        auto_cols.sort(key=lambda x: int(x[1:]))
+        if num_topics is None:
+            num_topics = len(auto_cols)
+        if num_topics <= len(auto_cols):
+            self.sentim_cols = auto_cols[:num_topics]
+        else:
+            # fallback to generic naming if explicit count exceeds detected columns
+            self.sentim_cols = [f't{i}' for i in range(num_topics)]
+        self.num_topics = len(self.sentim_cols)
 
         self.sequence_len = 15
 
