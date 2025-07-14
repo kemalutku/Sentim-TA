@@ -1,10 +1,12 @@
 import os, random, numpy as np, torch, config
+from datetime import datetime
 from pathlib import Path
 from tqdm import trange, tqdm
 from torch.utils.data import DataLoader
 from dataset.MultiModalDataset import MultiModalDataset
 from logger import TBLogger
 from trade import trading
+from model import CnnTaFusion
 
 # ───────── reproducibility ─────────
 torch.manual_seed(42);
@@ -209,6 +211,81 @@ def _run_finance_then_freeze(log_suffix: str, comment: str) -> None:
     logger.close()
 
 
+def _run_fusion_vector(log_suffix: str, comment: str) -> None:
+    """Train a model that fuses finance features with a sentiment MLP."""
+
+    finance_train_dir = list(Path(config.train_dir).glob(config.sentiment_ticker + "*.csv"))[0]
+    finance_test_dir = list(Path(config.test_dir).glob(config.sentiment_ticker + "*.csv"))[0]
+
+    train_ds = MultiModalDataset(
+        str(finance_train_dir),
+        config.sentiment_dir,
+        config.indicators,
+        include_sentiment=True,
+        num_topics=config.num_topics,
+    )
+    train_ld = DataLoader(
+        train_ds, batch_size=config.batch_size, shuffle=True, pin_memory=True, drop_last=True
+    )
+
+    test_ds = MultiModalDataset(
+        str(finance_test_dir),
+        config.sentiment_dir,
+        config.indicators,
+        include_sentiment=True,
+        num_topics=config.num_topics,
+    )
+    test_ld = DataLoader(test_ds, batch_size=config.batch_size, shuffle=False, pin_memory=True)
+
+    model = CnnTaFusion(num_topics=train_ds.num_topics).to(device)
+    opt = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
+    crit = torch.nn.CrossEntropyLoss(
+        weight=torch.tensor(config.class_weights, device=device)
+    )
+
+    run_name = f"{config.run_name}_{log_suffix}"
+    logger = TBLogger(config.record_dir, run_name, comment=comment)
+
+    for epoch in trange(config.max_epochs, desc="Fusion"):
+        model.train(); ep_loss, p_all, y_all = 0.0, [], []
+        for _, _, imgs, lbls in tqdm(train_ld, desc="Train", leave=False):
+            fin = imgs[:, 0:1].to(device, non_blocking=True)
+            sent = imgs[:, 1].to(device, non_blocking=True)
+            lbls = lbls.to(device, non_blocking=True)
+
+            opt.zero_grad(set_to_none=True)
+            outs = model(fin, sent)
+            loss = crit(outs, lbls)
+            loss.backward()
+            opt.step()
+
+            ep_loss += loss.item()
+            p_all.extend(torch.argmax(outs, 1).cpu().tolist())
+            y_all.extend(torch.argmax(lbls, 1).cpu().tolist())
+
+        logger.log_epoch("train", epoch, ep_loss / len(train_ld), np.array(y_all), np.array(p_all))
+
+        # ---- eval ----
+        model.eval(); tot_loss, batches = 0.0, 0; p_all, y_all = [], []; by_symbol = {}
+        with torch.no_grad():
+            for ts, closes, imgs, lbls in tqdm(test_ld, desc="Eval", leave=False):
+                fin = imgs[:, 0:1].to(device)
+                sent = imgs[:, 1].to(device)
+                lbls = lbls.to(device)
+                outs = model(fin, sent)
+                tot_loss += crit(outs, lbls).item(); batches += 1
+                preds = torch.argmax(outs, 1).cpu().tolist(); labs = torch.argmax(lbls, 1).cpu().tolist()
+                p_all.extend(preds); y_all.extend(labs)
+                bucket = by_symbol.setdefault(config.sentiment_ticker, {"ts": [], "cl": [], "pr": []})
+                bucket["ts"].extend(ts.cpu().tolist()); bucket["cl"].extend(closes.cpu().tolist()); bucket["pr"].extend(preds)
+
+        logger.log_epoch("eval", epoch, tot_loss / batches, np.array(y_all), np.array(p_all))
+        trade_res = [trading(v["ts"], v["cl"], v["pr"])[0] for v in by_symbol.values()]
+        logger.log_trading(epoch, trade_res)
+
+    logger.close()
+
+
 def train():
     # ---- Stage 1: finance-only training ----
     _run_training(in_channels=1, include_sentiment=False,
@@ -221,7 +298,21 @@ def train():
     # ---- Stage 3: finance pretrain then freeze ----
     _run_finance_then_freeze(log_suffix="fin_freeze", comment="fin-freeze")
 
+    # ---- Stage 4: fusion with sentiment MLP ----
+    _run_fusion_vector(log_suffix="fusion_vec", comment="fusion-vector")
+
 
 if __name__ == "__main__":
-    train()
+    tickers = getattr(config, "sentiment_ticker_list", [config.sentiment_ticker])
+    base_name = getattr(config, "run_name_base", config.run_name)
+    for t in tickers:
+        config.sentiment_ticker = t
+        config.sentiment_dir = os.path.join(
+            config.working_dir,
+            "data_sentim",
+            "preprocessed",
+            f"{t}.csv",
+        )
+        config.run_name = f"{base_name}_{t}-{datetime.now().strftime('%m_%d_%H_%M')}"
+        train()
     print("✓ Training complete.")
