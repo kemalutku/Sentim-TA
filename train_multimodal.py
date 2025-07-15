@@ -19,7 +19,13 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 # ───────── training loop ───────────
-def _run_training(in_channels: int, include_sentiment: bool, log_suffix: str, comment: str):
+def _run_training(
+    in_channels: int,
+    include_sentiment: bool,
+    log_suffix: str,
+    comment: str,
+    last_day_only: bool = False,
+):
     model = config.model(in_channels=in_channels).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
     crit = torch.nn.CrossEntropyLoss(weight=torch.tensor(config.class_weights, device=device))
@@ -27,13 +33,23 @@ def _run_training(in_channels: int, include_sentiment: bool, log_suffix: str, co
     finance_train_dir = list(Path(config.train_dir).glob(config.sentiment_ticker + "*.csv"))[0]
     finance_test_dir = list(Path(config.test_dir).glob(config.sentiment_ticker + "*.csv"))[0]
 
-    train_ds = MultiModalDataset(str(finance_train_dir), config.sentiment_dir,
-                                config.indicators, include_sentiment=include_sentiment)
+    train_ds = MultiModalDataset(
+        str(finance_train_dir),
+        config.sentiment_dir,
+        config.indicators,
+        include_sentiment=include_sentiment,
+        last_day_sentiment=last_day_only,
+    )
     train_ld = DataLoader(train_ds, batch_size=config.batch_size, shuffle=True,
                           pin_memory=True, drop_last=True)
 
-    test_ds = MultiModalDataset(str(finance_test_dir), config.sentiment_dir,
-                               config.indicators, include_sentiment=include_sentiment)
+    test_ds = MultiModalDataset(
+        str(finance_test_dir),
+        config.sentiment_dir,
+        config.indicators,
+        include_sentiment=include_sentiment,
+        last_day_sentiment=last_day_only,
+    )
     test_ld = DataLoader(test_ds, batch_size=config.batch_size, shuffle=False,
                          pin_memory=True)
 
@@ -300,6 +316,15 @@ def train():
 
     # ---- Stage 4: fusion with sentiment MLP ----
     _run_fusion_vector(log_suffix="fusion_vec", comment="fusion-vector")
+
+    # ---- Stage 5: sentiment last-day only ----
+    _run_training(
+        in_channels=2,
+        include_sentiment=True,
+        log_suffix="last_day_sent",
+        comment="last-day-sentiment",
+        last_day_only=True,
+    )
 
 
 if __name__ == "__main__":

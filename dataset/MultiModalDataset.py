@@ -13,11 +13,17 @@ class MultiModalDataset(Dataset):
     Channel 0: finance features, Channel 1: sentiment features
     """
 
-    def __init__(self, finance_root: str | Path, sentim_root: str | Path,
-                 feature_cols: list[str], sort_by_date=True,
-                 return_symbol: bool = False,
-                 include_sentiment: bool = True,
-                 num_topics: int | None = None):
+    def __init__(
+        self,
+        finance_root: str | Path,
+        sentim_root: str | Path,
+        feature_cols: list[str],
+        sort_by_date=True,
+        return_symbol: bool = False,
+        include_sentiment: bool = True,
+        num_topics: int | None = None,
+        last_day_sentiment: bool = False,
+    ):
         """Create dataset for paired finance/sentiment CSVs.
 
         Parameters
@@ -40,6 +46,10 @@ class MultiModalDataset(Dataset):
             Explicit number of sentiment topic columns.  When ``None`` the
             number of ``t`` prefixed columns is automatically inferred from the
             sentiment CSV.
+        last_day_sentiment : bool, optional
+            When ``True`` only the sentiment values from the most recent day
+            in each window are used. These values are repeated across the
+            sentiment channel so that the network input remains 15\u00d715.
         """
 
         self.finance_root = Path(finance_root)
@@ -47,6 +57,7 @@ class MultiModalDataset(Dataset):
         self.num_classes = 3
         self.return_symbol = return_symbol
         self.include_sentiment = include_sentiment
+        self.last_day_sentiment = last_day_sentiment
 
         self.sentim_root = sroot = Path(sentim_root)
 
@@ -96,7 +107,11 @@ class MultiModalDataset(Dataset):
         start, end = idx, idx + self.sequence_len
         x = torch.from_numpy(self._indicator_data[start:end])
         if self.include_sentiment:
-            s = torch.from_numpy(self._sentiment_data[start:end])
+            if self.last_day_sentiment:
+                last = torch.from_numpy(self._sentiment_data[end - 1])
+                s = last.unsqueeze(0).repeat(self.sequence_len, 1)
+            else:
+                s = torch.from_numpy(self._sentiment_data[start:end])
             img = torch.stack([x, s], dim=0)  # (2, 15, 15)
         else:
             img = x.unsqueeze(0)  # (1, 15, 15)
