@@ -43,3 +43,7 @@ indicators = [
 
 run_name_base = r"DOW30_1h"
 run_name = f"{run_name_base}-{datetime.now().strftime('%m_%d_%H_%M')}"
+
+# thresholds for regression-based trading
+buy_threshold = 0.5
+sell_threshold = -0.5
