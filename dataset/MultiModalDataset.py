@@ -23,6 +23,7 @@ class MultiModalDataset(Dataset):
         include_sentiment: bool = True,
         num_topics: int | None = None,
         last_day_sentiment: bool = False,
+        sequence_len: int = 15,
     ):
         """Create dataset for paired finance/sentiment CSVs.
 
@@ -49,7 +50,10 @@ class MultiModalDataset(Dataset):
         last_day_sentiment : bool, optional
             When ``True`` only the sentiment values from the most recent day
             in each window are used. These values are repeated across the
-            sentiment channel so that the network input remains 15\u00d715.
+            sentiment channel so that the network input retains the
+            ``sequence_len`` height.
+        sequence_len : int, optional
+            Number of days included in each input window.
         """
 
         self.finance_root = Path(finance_root)
@@ -58,6 +62,7 @@ class MultiModalDataset(Dataset):
         self.return_symbol = return_symbol
         self.include_sentiment = include_sentiment
         self.last_day_sentiment = last_day_sentiment
+        self.sequence_len = sequence_len
 
         self.sentim_root = sroot = Path(sentim_root)
 
@@ -72,8 +77,6 @@ class MultiModalDataset(Dataset):
             # fallback to generic naming if explicit count exceeds detected columns
             self.sentim_cols = [f't{i}' for i in range(num_topics)]
         self.num_topics = len(self.sentim_cols)
-
-        self.sequence_len = 15
 
         self._indicator_data = []
         self._sentiment_data = []
@@ -112,9 +115,9 @@ class MultiModalDataset(Dataset):
                 s = last.unsqueeze(0).repeat(self.sequence_len, 1)
             else:
                 s = torch.from_numpy(self._sentiment_data[start:end])
-            img = torch.stack([x, s], dim=0)  # (2, 15, 15)
+            img = torch.stack([x, s], dim=0)  # (2, T, F)
         else:
-            img = x.unsqueeze(0)  # (1, 15, 15)
+            img = x.unsqueeze(0)  # (1, T, F)
         y = torch.nn.functional.one_hot(
             torch.tensor(self._labels[end], dtype=torch.long),
             num_classes=self.num_classes

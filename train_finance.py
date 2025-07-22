@@ -17,20 +17,27 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # ───────── training loop ───────────
 def train() -> None:
-    model = config.model().to(device)
+    model = config.model(window_length=config.sequence_len).to(device)
     opt   = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
     crit  = torch.nn.CrossEntropyLoss(
         weight=torch.tensor(config.class_weights, device=device)
     )
 
     # ---- data ----
-    train_ds = FinanceImageDataset(config.train_dir, config.indicators)
+    train_ds = FinanceImageDataset(
+        config.train_dir,
+        config.indicators,
+        sequence_len=config.sequence_len,
+    )
     train_ld = DataLoader(
         train_ds, batch_size=config.batch_size, shuffle=True, pin_memory=True, drop_last=True
     )
 
     test_ds  = FinanceImageDataset(
-        config.test_dir, config.indicators, return_symbol=True
+        config.test_dir,
+        config.indicators,
+        return_symbol=True,
+        sequence_len=config.sequence_len,
     )
     test_ld  = DataLoader(
         test_ds, batch_size=config.batch_size, shuffle=False, pin_memory=True
