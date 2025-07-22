@@ -4,20 +4,23 @@ import torch.nn.functional as F
 
 
 class AttnTa(nn.Module):
-    """Simple transformer-based model for 15x15 finance windows.
+    """Transformer model operating on daily indicator vectors.
 
-    Each time step of the input window is treated as a token and processed
-    by a small Transformer encoder. A learnable classification token is used
-    to pool sequence information for classification.
+    The input is expected to be ``(B, C, T, F)`` where ``T`` is the sequence
+    length and ``F`` the number of indicators.  For each day the ``C`` channels
+    and ``F`` indicators are flattened and projected to ``d_model`` before being
+    fed to the Transformer encoder.
     """
 
-    def __init__(self, seq_len: int = 15, in_channels: int = 1,
-                 d_model: int = 64, num_heads: int = 8, num_layers: int = 2):
+    def __init__(self, seq_len: int = 15, num_features: int = 15,
+                 in_channels: int = 1, d_model: int = 64, num_heads: int = 8,
+                 num_layers: int = 2) -> None:
         super().__init__()
-        self.seq_len = seq_len
-        self.in_dim = in_channels * seq_len  # 15 features per step * channels
 
-        self.embed = nn.Linear(self.in_dim, d_model)
+        self.seq_len = seq_len
+        self.token_dim = num_features * in_channels
+
+        self.embed = nn.Linear(self.token_dim, d_model)
         self.cls_token = nn.Parameter(torch.zeros(1, 1, d_model))
         self.pos_embed = nn.Parameter(torch.zeros(1, seq_len + 1, d_model))
 
@@ -31,8 +34,8 @@ class AttnTa(nn.Module):
 
     def forward_features(self, x: torch.Tensor) -> torch.Tensor:
         b = x.size(0)
-        # x : (B, C, 15, 15) -> (B, 15, C*15)
-        x = x.permute(0, 2, 1, 3).reshape(b, self.seq_len, -1)
+        # x : (B, C, T, F) -> (B, T, C*F)
+        x = x.permute(0, 2, 1, 3).reshape(b, self.seq_len, self.token_dim)
         x = self.embed(x)
         cls = self.cls_token.expand(b, -1, -1)
         x = torch.cat([cls, x], dim=1)

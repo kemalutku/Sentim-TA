@@ -24,7 +24,10 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def _run_training(in_channels: int, include_sentiment: bool, suffix: str) -> None:
-    model = AttnTa(in_channels=in_channels).to(device)
+    model = AttnTa(
+        in_channels=in_channels,
+        num_features=len(config.indicators)
+    ).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
     crit = torch.nn.CrossEntropyLoss(
         weight=torch.tensor(config.class_weights, device=device)
