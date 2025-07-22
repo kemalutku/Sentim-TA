@@ -46,6 +46,33 @@ def sliding_window_labeling(data, window_size=11, relabel_range=2):
     return data
 
 
+def sliding_window_regression(data, window_size=11):
+    """Assign a score in [-1, 1] based on proximity to local extreme."""
+    half_window = window_size // 2
+    scores = []
+
+    closes = data['Close'].values
+
+    for i in range(len(data)):
+        if i < half_window or i >= len(data) - half_window:
+            scores.append(0.0)
+            continue
+
+        window = closes[i - half_window : i + half_window + 1]
+        low, high = window.min(), window.max()
+        mid = closes[i]
+
+        if high == low:
+            score = 0.0
+        else:
+            score = 2 * (mid - low) / (high - low) - 1
+
+        scores.append(float(score))
+
+    data['RegLabel'] = scores
+    return data
+
+
 def label_threshold_based(data, horizon: int = 2, threshold: float = 0.02):
     prices = data["Close"]
     future_returns = (prices.shift(-horizon) - prices) / prices

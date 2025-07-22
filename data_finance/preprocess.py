@@ -44,7 +44,8 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
         "CMF" : tav.cmf(df.High, df.Low, df.Close, df.Volume),
         "ADX" : ta.adx(df.High, df.Low, df.Close)["ADX_14"],
         "PSA" : ta.psar(df.High, df.Low)["PSARaf_0.02_0.2"],
-        "Label": df.Label
+        "Label": df.Label,
+        "RegLabel": df.RegLabel,
     }, index=df.index)
 
     # drop warm-up rows (60 is original choice)
@@ -56,10 +57,14 @@ def read_raw(path: Path) -> pd.DataFrame:
     return pd.read_csv(path, index_col=0)
 
 def label_df(df: pd.DataFrame) -> pd.DataFrame:
-    # your existing sliding_window_labeling (renamed for clarity)
-    from label_function import sliding_window_labeling
-    return sliding_window_labeling(df, window_size=WINDOW_SIZE,
-                                   relabel_range=RELABEL_RANGE)
+    """Apply classification and regression labeling."""
+    from label_function import sliding_window_labeling, sliding_window_regression
+
+    df = sliding_window_labeling(
+        df, window_size=WINDOW_SIZE, relabel_range=RELABEL_RANGE
+    )
+    df = sliding_window_regression(df, window_size=WINDOW_SIZE)
+    return df
 
 def process_symbol(path: Path) -> tuple[str, pd.DataFrame]:
     """Read → label → add indicators.  Return symbol name and engineered DF."""
@@ -103,13 +108,13 @@ def preprocess(parallel: bool = True, max_workers: int | None = None):
     # ----------  Stage 2: global scaling ----------
     full = pd.concat(frames)
     scaler = MinMaxScaler()
-    full.iloc[:, :-2] = scaler.fit_transform(full.iloc[:, :-2])   # exclude Label, Close
+    full.iloc[:, :-3] = scaler.fit_transform(full.iloc[:, :-3])   # exclude labels and Close
 
     # broadcast the scaled values back to each symbol frame
     start = 0
     for sym, frame in zip(symbols, frames):
         stop = start + len(frame)
-        frame.iloc[:, :-2] = full.iloc[start:stop, :-2].to_numpy()
+        frame.iloc[:, :-3] = full.iloc[start:stop, :-3].to_numpy()
         write_split(frame, sym)
         start = stop
 

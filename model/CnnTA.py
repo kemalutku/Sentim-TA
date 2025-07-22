@@ -6,7 +6,7 @@ import torch.nn.functional as F
 class CnnTa(nn.Module):
     model_name = "CNN-TA"
 
-    def __init__(self, apply_bn=False, window_length=15, in_channels=1):
+    def __init__(self, apply_bn=False, window_length=15, in_channels=1, out_dim=3):
         super(CnnTa, self).__init__()
         pool_output_dim = int(window_length / 2)
 
@@ -18,7 +18,7 @@ class CnnTa(nn.Module):
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
 
         self.fc1 = nn.Linear(64 * pool_output_dim * pool_output_dim, 128)
-        self.fc2 = nn.Linear(128, 3)
+        self.fc2 = nn.Linear(128, out_dim)
 
         self.dropout1 = nn.Dropout(0.25)
         self.dropout2 = nn.Dropout(0.5)
