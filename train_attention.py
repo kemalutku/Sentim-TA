@@ -26,7 +26,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def _run_training(in_channels: int, include_sentiment: bool, suffix: str) -> None:
     model = AttnTa(
         in_channels=in_channels,
-        num_features=len(config.indicators)
+        num_features=len(config.indicators),
+        seq_len=config.sequence_len,
     ).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
     crit = torch.nn.CrossEntropyLoss(
@@ -41,6 +42,7 @@ def _run_training(in_channels: int, include_sentiment: bool, suffix: str) -> Non
         config.sentiment_dir,
         config.indicators,
         include_sentiment=include_sentiment,
+        sequence_len=config.sequence_len,
     )
     train_ld = DataLoader(train_ds, batch_size=config.batch_size, shuffle=True,
                           pin_memory=True, drop_last=True)
@@ -50,6 +52,7 @@ def _run_training(in_channels: int, include_sentiment: bool, suffix: str) -> Non
         config.sentiment_dir,
         config.indicators,
         include_sentiment=include_sentiment,
+        sequence_len=config.sequence_len,
     )
     test_ld = DataLoader(test_ds, batch_size=config.batch_size, shuffle=False,
                          pin_memory=True)

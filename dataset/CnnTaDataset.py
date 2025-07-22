@@ -12,13 +12,25 @@ class FinanceImageDataset(Dataset):
     If `root` is a directory → read all *.csv inside.
     If `root` is a file      → treat it as the single source CSV.
     Each sample: (timestamp, close, image-tensor, one-hot label)
+
+    Parameters
+    ----------
+    sequence_len : int
+        Number of days to include in each input window.
     """
 
-    def __init__(self, root: str | Path, feature_cols: list[str], sort_by_date = True, return_symbol = False):
+    def __init__(
+        self,
+        root: str | Path,
+        feature_cols: list[str],
+        sort_by_date: bool = True,
+        return_symbol: bool = False,
+        sequence_len: int = 15,
+    ):
 
         self.root = p = Path(root)
         self.feature_cols = feature_cols
-        self.sequence_len = 15
+        self.sequence_len = sequence_len
         self.num_classes = 3
         self.return_symbol = return_symbol
 

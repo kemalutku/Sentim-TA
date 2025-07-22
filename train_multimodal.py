@@ -26,7 +26,10 @@ def _run_training(
     comment: str,
     last_day_only: bool = False,
 ):
-    model = config.model(in_channels=in_channels).to(device)
+    model = config.model(
+        in_channels=in_channels,
+        window_length=config.sequence_len,
+    ).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
     crit = torch.nn.CrossEntropyLoss(weight=torch.tensor(config.class_weights, device=device))
 
@@ -39,6 +42,7 @@ def _run_training(
         config.indicators,
         include_sentiment=include_sentiment,
         last_day_sentiment=last_day_only,
+        sequence_len=config.sequence_len,
     )
     train_ld = DataLoader(train_ds, batch_size=config.batch_size, shuffle=True,
                           pin_memory=True, drop_last=True)
@@ -49,6 +53,7 @@ def _run_training(
         config.indicators,
         include_sentiment=include_sentiment,
         last_day_sentiment=last_day_only,
+        sequence_len=config.sequence_len,
     )
     test_ld = DataLoader(test_ds, batch_size=config.batch_size, shuffle=False,
                          pin_memory=True)
@@ -116,19 +121,29 @@ def _run_finance_then_freeze(log_suffix: str, comment: str) -> None:
     """Train a 2-channel model, first on finance only then freeze finance
     convolution weights and continue training with sentiment."""
 
-    model = config.model(in_channels=2).to(device)
+    model = config.model(in_channels=2, window_length=config.sequence_len).to(device)
     crit = torch.nn.CrossEntropyLoss(weight=torch.tensor(config.class_weights, device=device))
 
     finance_train_dir = list(Path(config.train_dir).glob(config.sentiment_ticker + "*.csv"))[0]
     finance_test_dir = list(Path(config.test_dir).glob(config.sentiment_ticker + "*.csv"))[0]
 
-    train_ds = MultiModalDataset(str(finance_train_dir), config.sentiment_dir,
-                                config.indicators, include_sentiment=True)
+    train_ds = MultiModalDataset(
+        str(finance_train_dir),
+        config.sentiment_dir,
+        config.indicators,
+        include_sentiment=True,
+        sequence_len=config.sequence_len,
+    )
     train_ld = DataLoader(train_ds, batch_size=config.batch_size, shuffle=True,
                           pin_memory=True, drop_last=True)
 
-    test_ds = MultiModalDataset(str(finance_test_dir), config.sentiment_dir,
-                               config.indicators, include_sentiment=True)
+    test_ds = MultiModalDataset(
+        str(finance_test_dir),
+        config.sentiment_dir,
+        config.indicators,
+        include_sentiment=True,
+        sequence_len=config.sequence_len,
+    )
     test_ld = DataLoader(test_ds, batch_size=config.batch_size, shuffle=False,
                          pin_memory=True)
 
@@ -239,6 +254,7 @@ def _run_fusion_vector(log_suffix: str, comment: str) -> None:
         config.indicators,
         include_sentiment=True,
         num_topics=config.num_topics,
+        sequence_len=config.sequence_len,
     )
     train_ld = DataLoader(
         train_ds, batch_size=config.batch_size, shuffle=True, pin_memory=True, drop_last=True
@@ -250,10 +266,14 @@ def _run_fusion_vector(log_suffix: str, comment: str) -> None:
         config.indicators,
         include_sentiment=True,
         num_topics=config.num_topics,
+        sequence_len=config.sequence_len,
     )
     test_ld = DataLoader(test_ds, batch_size=config.batch_size, shuffle=False, pin_memory=True)
 
-    model = CnnTaFusion(num_topics=train_ds.num_topics).to(device)
+    model = CnnTaFusion(
+        num_topics=train_ds.num_topics,
+        window_length=config.sequence_len,
+    ).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
     crit = torch.nn.CrossEntropyLoss(
         weight=torch.tensor(config.class_weights, device=device)

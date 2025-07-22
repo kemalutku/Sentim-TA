@@ -6,6 +6,10 @@ max_epochs = 1000
 batch_size = 32
 learning_rate = 1e-3
 
+# Number of trading days used as the input window size. Increase this
+# to train on longer historical contexts, e.g. 30, 60 or 90 days.
+sequence_len = 15
+
 working_dir = r"D:\CnnTA\v2"
 
 train_dir = os.path.join(working_dir, "data_finance", "train", "1d")
