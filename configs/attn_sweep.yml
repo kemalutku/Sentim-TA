@@ -1,0 +1,4 @@
+window_lengths: [30, 60, 90]
+d_models: [64, 128]
+n_layers: [2, 4]
+attention: [vanilla, performer]
