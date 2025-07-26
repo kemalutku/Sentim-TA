@@ -34,25 +34,36 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     return ind
 
 
-def process_dir(src: Path) -> tuple[np.ndarray, np.ndarray]:
+def process_file(path: Path) -> tuple[pd.DataFrame, pd.Series]:
+    df = pd.read_csv(path)
+    ind = compute_indicators(df)
+    df = pd.concat([
+        df[["Open", "High", "Low", "Close", "Volume"]],
+        ind,
+        df[["Label"]],
+    ], axis=1).dropna()
+    return df.drop(columns="Label"), df["Label"]
+
+
+def load_sources(paths: list[Path]) -> tuple[np.ndarray, np.ndarray]:
     feats, lbls = [], []
-    for csv in sorted(src.glob("*.csv")):
-        df = pd.read_csv(csv)
-        ind = compute_indicators(df)
-        df = pd.concat([
-            df[["Open", "High", "Low", "Close", "Volume"]],
-            ind,
-            df[["Label"]],
-        ], axis=1).dropna()
-        feats.append(df.drop(columns="Label"))
-        lbls.append(df["Label"])
+    for p in paths:
+        p = Path(p)
+        if p.is_dir():
+            items = sorted(p.glob("*.csv"))
+        else:
+            items = [p]
+        for item in items:
+            f, l = process_file(item)
+            feats.append(f)
+            lbls.append(l)
     feat = pd.concat(feats, ignore_index=True).astype(np.float32)
     lab = pd.concat(lbls, ignore_index=True).astype(np.int64)
     return feat.to_numpy(), lab.to_numpy()
 
 
-def main(source_dir: str, out_path: str):
-    feat, lab = process_dir(Path(source_dir))
+def main(out_path: str, sources: list[str]):
+    feat, lab = load_sources([Path(s) for s in sources])
     df = pd.DataFrame(feat, columns=[
         "Open", "High", "Low", "Close", "Volume", *INDICATORS
     ])
@@ -65,7 +76,7 @@ if __name__ == "__main__":
     import argparse
 
     ap = argparse.ArgumentParser()
-    ap.add_argument("source_dir", help="directory with finance CSVs")
+    ap.add_argument("sources", nargs="+", help="CSV files or directories")
     ap.add_argument("out", help="output parquet path")
     args = ap.parse_args()
-    main(args.source_dir, args.out)
+    main(args.out, args.sources)

@@ -10,9 +10,9 @@ Refer to `model/AttnTA.py` for implementation details.
 
 ## AttnTA Lightning Training
 
-1. Preprocess finance CSVs to a parquet file containing indicator features:
+1. Preprocess one or more directories of finance CSVs into a single parquet:
    ```bash
-   python data_finance/build_parquet.py <csv_dir> features.parquet
+   python data_finance/build_parquet.py <dir1> [dir2 ...] features.parquet
    ```
 
 2. Train the attention model using the sequence window dataset:
